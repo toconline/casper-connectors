@@ -682,32 +682,51 @@ void ev::redis::Device::HiredisDisconnectCallback (const struct redisAsyncContex
             device->last_error_msg_ = "";
         }
         
-        // ... forget context ....
-        device->hiredis_context_->data = nullptr;
-        device->hiredis_context_ = nullptr;
+        // ... always null this specific context's data pointer to prevent any dangling reference,
+        // even when the device has already reconnected via a newer context ...
+        const_cast<struct redisAsyncContext*>(a_context)->data = nullptr;
         
-        // ... set current status ...
-        device->connection_status_ = device->hiredis_context_ == nullptr ? ev::Device::ConnectionStatus::Disconnected : ev::Device::ConnectionStatus::Error;
-        
-        // ... for debug purposes only ...
-        ev::LoggerV2::GetInstance().Log(device, "redis_trace",
-                                        "[%-30s] : a_context = %p, a_status = %d, connection_status_ = " UINT8_FMT ", disconnected_callback_ = %s",
-                                        __FUNCTION__,
-                                        a_context,
-                                        a_status,
-                                        static_cast<uint8_t>(device->connection_status_),
-                                        nullptr != device->disconnected_callback_ ? "<set>" : "<not set>"
-        );
-        
-        // ... specific callback request ...
-        if ( nullptr != device->disconnected_callback_ ) {
-            device->disconnected_callback_(device->connection_status_, device);
-            device->disconnected_callback_ = nullptr;
-        }
-        
-        // ... notify all listeners ...
-        if ( nullptr != device->listener_ptr_ ) {
-            device->listener_ptr_->OnConnectionStatusChanged(device->connection_status_, device);
+        // ... only update device state if this is still the active context;
+        // a stale disconnect callback can fire for a previously-used context
+        // (e.g. hiredis finalises a replaced context while the device has already
+        // established a new connection) — updating state in that case would falsely
+        // mark a live connection as Disconnected and corrupt the new context ...
+        if ( device->hiredis_context_ == a_context ) {
+            device->hiredis_context_ = nullptr;
+            
+            // ... set current status ...
+            device->connection_status_ = ev::Device::ConnectionStatus::Disconnected;
+            
+            // ... for debug purposes only ...
+            ev::LoggerV2::GetInstance().Log(device, "redis_trace",
+                                            "[%-30s] : a_context = %p, a_status = %d, connection_status_ = " UINT8_FMT ", disconnected_callback_ = %s",
+                                            __FUNCTION__,
+                                            a_context,
+                                            a_status,
+                                            static_cast<uint8_t>(device->connection_status_),
+                                            nullptr != device->disconnected_callback_ ? "<set>" : "<not set>"
+            );
+            
+            // ... specific callback request ...
+            if ( nullptr != device->disconnected_callback_ ) {
+                device->disconnected_callback_(device->connection_status_, device);
+                device->disconnected_callback_ = nullptr;
+            }
+            
+            // ... notify all listeners ...
+            if ( nullptr != device->listener_ptr_ ) {
+                device->listener_ptr_->OnConnectionStatusChanged(device->connection_status_, device);
+            }
+        } else {
+            // ... stale disconnect: this context was superseded by a newer one while the
+            // device was reconnecting; discard to avoid disrupting the live connection ...
+            ev::LoggerV2::GetInstance().Log(device, "redis_trace",
+                                            "[%-30s] : a_context = %p, a_status = %d, stale context ignored ( active = %p )",
+                                            __FUNCTION__,
+                                            a_context,
+                                            a_status,
+                                            device->hiredis_context_
+            );
         }
         
     } catch (const ev::Exception& a_ev_exception) {
@@ -781,7 +800,11 @@ void ev::redis::Device::HiredisDataCallback (struct redisAsyncContext* a_context
     }
 
     ev::redis::Device* device = static_cast<ev::redis::Device*>(a_context->data);
-    
+    if ( nullptr == device ) {
+        // context was already nulled by HiredisDisconnectCallback (stale late-arriving callback)
+        return;
+    }
+
     try {
 
         // ... for debug purposes only ...

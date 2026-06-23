@@ -321,7 +321,12 @@ void ::ev::postgresql::JSONAPI::AsyncQuery (const ::ev::Loggable::Data& a_loggab
         if ( nullptr == reply ) {
             const ::ev::postgresql::Error* error = dynamic_cast<const ::ev::postgresql::Error*>(result->DataObject());
             if ( nullptr != error ) {
-                a_callback(/* a_uri */ query.c_str(), /* a_json */ nullptr, /* a_error */ error->message().c_str(), /* a_status */ 500, /* a_elapsed */ 0);
+                if (error->message().find("scanner_yyerror") != std::string::npos) {
+                    const std::string internalServerError = "internal server error";
+                    a_callback(/* a_uri */ query.c_str(), /* a_json */ nullptr, /* a_error */ internalServerError.c_str(), /* a_status */ 500, /* a_elapsed */ 0);
+                } else {
+                    a_callback(/* a_uri */ query.c_str(), /* a_json */ nullptr, /* a_error */ error->message().c_str(), /* a_status */ 500, /* a_elapsed */ 0);
+                }
             } else {
                 throw ::ev::Exception("Unexpected PostgreSQL data object!");
             }
@@ -345,7 +350,14 @@ void ::ev::postgresql::JSONAPI::AsyncQuery (const ::ev::Loggable::Data& a_loggab
         }
         
     })->Catch([this, query, a_callback] (const ::ev::Exception& a_ev_exception) {
-        OnReply(/* a_uri */ query.c_str(), /* a_json */ nullptr, /* a_error */ a_ev_exception.what(), /* a_status */ 500, /* a_elapsed */ 0, /* a_callback */ a_callback);
+        const std::string whatStr(a_ev_exception.what());
+        if(whatStr.find("scanner_yyerror") != std::string::npos) {
+            const std::string internalServerError = "internal server error";
+            OnReply(/* a_uri */ query.c_str(), /* a_json */ nullptr, /* a_error */ internalServerError.c_str(), /* a_status */ 500, /* a_elapsed */ 0, /* a_callback */ a_callback);
+        } else {
+            OnReply(/* a_uri */ query.c_str(), /* a_json */ nullptr, /* a_error */ a_ev_exception.what(), /* a_status */ 500, /* a_elapsed */ 0, /* a_callback */ a_callback);
+        }
+        // OnReply(/* a_uri */ query.c_str(), /* a_json */ nullptr, /* a_error */ a_ev_exception.what(), /* a_status */ 500, /* a_elapsed */ 0, /* a_callback */ a_callback);
     });
 }
 

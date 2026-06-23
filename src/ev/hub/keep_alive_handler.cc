@@ -362,9 +362,11 @@ void ev::hub::KeepAliveHandler::DeviceConnectionCallback (const ev::Device::Conn
     
     const ev::Device::Status exec_rv = a_device->Execute(/* a_callback */ nullptr, /* a_request */ it->second);
     if ( ev::Device::Status::Async != exec_rv ) {
-        // .. something is seriously wrong: device is not properly set ? ...
-        throw ev::Exception("Unable to execute request: return code is " UINT8_FMT " expecting " UINT8_FMT"!",
-                             (uint8_t)exec_rv, (uint8_t)ev::Device::Status::Async
-        );
+        // ... command was rejected by the device (e.g. UNSUBSCRIBE on a fresh connection whose
+        // REDIS_SUBSCRIBED flag was never set by hiredis, or a stale request after a state-machine
+        // reset on disconnect). This is a recoverable state mismatch: the subscription state
+        // machine will re-evaluate on the next disconnect/reconnect cycle. Do not escalate to a
+        // fatal exception.
+        return;
     }
 }
