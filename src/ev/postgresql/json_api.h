@@ -375,10 +375,10 @@ namespace ev
                                  const std::string& a_uri, const std::string& a_body, Callback a_callback,
                                  std::string* o_query = nullptr);
             virtual void Patch  (const std::string& a_uri, const std::string& a_body, Callback a_callback,
-                                 std::string* o_query = nullptr, const bool a_sql_escape = true);
+                                 std::string* o_query = nullptr);
             virtual void Patch  (const Loggable::Data& a_loggable_data,
                                  const std::string& a_uri, const std::string& a_body, Callback a_callback,
-                                 std::string* o_query = nullptr, const bool a_sql_escape = true);
+                                 std::string* o_query = nullptr);
             virtual void Delete (const std::string& a_uri, const std::string& a_body, Callback a_callback,
                                  std::string* o_query = nullptr);
             virtual void Delete (const Loggable::Data& a_loggable_data,

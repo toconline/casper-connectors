@@ -199,12 +199,11 @@ void ::ev::postgresql::JSONAPI::Post (const ::ev::Loggable::Data& a_loggable_dat
  * @param a_callback
  *
  * @param o_query
- * @param a_sql_escape
  */
 void ::ev::postgresql::JSONAPI::Patch (const std::string& a_uri, const std::string& a_body, ::ev::postgresql::JSONAPI::Callback a_callback,
-                                       std::string* o_query, const bool a_sql_escape)
+                                       std::string* o_query)
 {
-    Patch(loggable_data_ref_, a_uri, a_body, a_callback, o_query, a_sql_escape);
+    Patch(loggable_data_ref_, a_uri, a_body, a_callback, o_query);
 }
 
 /**
@@ -216,21 +215,16 @@ void ::ev::postgresql::JSONAPI::Patch (const std::string& a_uri, const std::stri
  * @param a_callback
  *
  * @param o_query
- * @param a_sql_escape
  */
 void ::ev::postgresql::JSONAPI::Patch (const ::ev::Loggable::Data& a_loggable_data,
                                        const std::string& a_uri, const std::string& a_body, ::ev::postgresql::JSONAPI::Callback a_callback,
-                                       std::string* o_query, const bool a_sql_escape)
+                                       std::string* o_query)
 {
     /*
      * Build Query
      */
     std::string body;
-    if ( true == a_sql_escape ) {
-        ::ev::postgresql::Request::SQLEscape(a_body, body);
-    } else {
-        body = a_body;
-    }
+    ::ev::postgresql::Request::SQLEscape(a_body, body);
 
     std::stringstream ss;
     ss << "SELECT response,http_status FROM jsonapi('PATCH','" << a_uri << "','" << body <<  "','" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << sharded_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
