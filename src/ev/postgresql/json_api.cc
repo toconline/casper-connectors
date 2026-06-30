@@ -99,7 +99,7 @@
 std::string ev::postgresql::JSONAPI::GetQuery (const std::string& a_uri)
 {
     std::stringstream ss;
-    ss << "SELECT response,http_status FROM jsonapi('GET', '" << a_uri << "', '', '" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
+    ss << "SELECT response,http_status FROM jsonapi('GET', '" << a_uri << "', '', '" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << sharded_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
     return ss.str();
 }
 
@@ -139,7 +139,7 @@ void ::ev::postgresql::JSONAPI::Get (const ::ev::Loggable::Data& a_loggable_data
      * Build Query
      */
     std::stringstream ss;
-    ss << "SELECT response,http_status FROM jsonapi('GET', '" << a_uri << "', '', '" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
+    ss << "SELECT response,http_status FROM jsonapi('GET', '" << a_uri << "', '', '" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << sharded_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
 
     /*
      * Run query ( asynchronously )...
@@ -183,7 +183,7 @@ void ::ev::postgresql::JSONAPI::Post (const ::ev::Loggable::Data& a_loggable_dat
     ::ev::postgresql::Request::SQLEscape(a_body, body);
 
     std::stringstream ss;
-    ss << "SELECT response,http_status FROM jsonapi('POST','" << a_uri << "','" << body <<  "','" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
+    ss << "SELECT response,http_status FROM jsonapi('POST','" << a_uri << "','" << body <<  "','" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << sharded_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
     
     /*
      * Run query ( asynchronously )...
@@ -233,7 +233,7 @@ void ::ev::postgresql::JSONAPI::Patch (const ::ev::Loggable::Data& a_loggable_da
     }
 
     std::stringstream ss;
-    ss << "SELECT response,http_status FROM jsonapi('PATCH','" << a_uri << "','" << body <<  "','" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
+    ss << "SELECT response,http_status FROM jsonapi('PATCH','" << a_uri << "','" << body <<  "','" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << sharded_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
 
     /*
      * Run query ( asynchronously )...
@@ -278,7 +278,7 @@ void ::ev::postgresql::JSONAPI::Delete (const ::ev::Loggable::Data& a_loggable_d
     ::ev::postgresql::Request::SQLEscape(a_body, body);
 
     std::stringstream ss;
-    ss << "SELECT response,http_status FROM jsonapi('DELETE','" << a_uri << "','" << body <<  "','" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
+    ss << "SELECT response,http_status FROM jsonapi('DELETE','" << a_uri << "','" << body <<  "','" << user_id_ << "', '" << entity_id_ << "', '" << entity_schema_ << "', '" << sharded_schema_ << "', '" << subentity_schema_ << "', '" << subentity_prefix_ << "');";
     
     /*
      * Run query ( asynchronously )...
