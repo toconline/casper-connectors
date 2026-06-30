@@ -364,9 +364,6 @@ namespace ev
          */
         inline void Request::SetProxy (const Request::Proxy& a_proxy)
         {
-            if ( 0 == a_proxy.url_.length() ) {
-                return;
-            }
             if ( CURLE_FAILED_INIT == initialization_error_ || CURLE_OK == initialization_error_ ) {
                 auto handle = Setup();
                 initialization_error_ += curl_easy_setopt(handle, CURLOPT_PROXY, a_proxy.url_.c_str());

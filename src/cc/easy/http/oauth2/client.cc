@@ -548,14 +548,6 @@ void cc::easy::http::oauth2::Client::Async (const cc::easy::http::oauth2::Client
                                 }
                                 // ... new request ...
                                 ::ev::curl::Request* next_request = new ::ev::curl::Request(loggable_data_, a_method, a_url, &next_headers, &tx_body);
-                                // ... debug stuff ...
-#ifdef CC_DEBUG_ON
-                                if ( true == ssl_do_not_verify_peer_ ) {
-                                    next_request->SetSSLDoNotVerifyPeer();
-                                }
-                                next_request->SetProxy(proxy_);
-                                next_request->SetCACert(ca_cert_);
-#endif
                                 // ... log request?
                                 if ( nullptr != cURLed_callbacks_.log_request_ ) {
                                     cURLed_callbacks_.log_request_(*next_request, ::ev::curl::HTTP::cURLRequest(id, next_request, should_redact_));
