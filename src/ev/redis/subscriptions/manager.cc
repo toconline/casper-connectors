@@ -696,6 +696,13 @@ bool ev::redis::subscriptions::Manager::OnREDISDisconnected (::ev::redis::subscr
 
         OSALITE_DEBUG_TRACE("ev_subscriptions", "~> REDIS Disconnected @ MT...");
 
+        // ... already recovered ( e.g. by a [P]SUBSCRIBE reply ) ? ...
+        if ( false == recovery_mode_ ) {
+            // ... yes, no control ping required and reconnect timeout must not be changed ...
+            OSALITE_DEBUG_TRACE("ev_subscriptions", "<~ REDIS Disconnected @ MT: already recovered...");
+            return;
+        }
+
         if ( reconnect_timeout_ >= k_max_reconnect_timeout_ ) {
             
             // ... for all maps ...
