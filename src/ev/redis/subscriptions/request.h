@@ -166,7 +166,9 @@ namespace ev
                 bool   IsPUnsubscribedOrPending (const std::string& a_pattern);
                 
                 bool   Ping                     ();
-                
+
+                void   LogEvent                 (const char* const a_key, const char* const a_format, ...) __attribute__((format(printf, 3, 4)));
+
             private:
                 
                 void   Subscribe                (ContextMap& a_map, POCStatusMap& a_status_map, const std::set<std::string>& a_names);

@@ -30,6 +30,7 @@ bool                                 ev::redis::subscriptions::Manager::redis_su
 ::ev::Bridge*                        ev::redis::subscriptions::Manager::bridge_                  = nullptr;
 uint64_t                             ev::redis::subscriptions::Manager::reconnect_timeout_       = 2000;  // 2s
 bool                                 ev::redis::subscriptions::Manager::recovery_mode_           = false;
+std::chrono::steady_clock::time_point ev::redis::subscriptions::Manager::recovery_start_tp_;
 
 const uint64_t                        ev::redis::subscriptions::Manager::k_min_reconnect_timeout_ = 2000;  // 2s
 const uint64_t                        ev::redis::subscriptions::Manager::k_max_reconnect_timeout_ = 32000; // 32s
@@ -623,7 +624,7 @@ void ev::redis::subscriptions::Manager::OnREDISReplyReceived (const ::ev::redis:
             // ... from a connection recovery process ?
             if ( true == recovery_mode_ ) {
                 // ... a [P]SUBSCRIBE reply proves the connection is back ( control PING is skipped in subscribe mode ) ...
-                RecoverFromDisconnect();
+                RecoverFromDisconnect("SUBSCRIBE");
             }
             if ( a_reply->Pattern().length() > 0 ) {
                 Notify(a_reply->Pattern(), ev::redis::subscriptions::Manager::Status::Subscribed, pattern_to_clients_map_);
@@ -660,7 +661,7 @@ void ev::redis::subscriptions::Manager::OnREDISReplyReceived (const ::ev::redis:
             if ( 0 == strcasecmp (a_reply->value().String().c_str(), "PONG") ) {
                 // ... from a connection recovery process ?
                 if ( true == recovery_mode_ ) {
-                    RecoverFromDisconnect();
+                    RecoverFromDisconnect("PONG");
                 }
             }
             break;
@@ -686,9 +687,18 @@ bool ev::redis::subscriptions::Manager::OnREDISDisconnected (::ev::redis::subscr
         return false;
     }
     
+    // ... keep track of when the connection was lost ( first disconnect of a recovery ) ...
+    if ( false == recovery_mode_ ) {
+        recovery_start_tp_ = std::chrono::steady_clock::now();
+    }
     recovery_mode_ = true;
-    
+
     OSALITE_DEBUG_TRACE("ev_subscriptions", "~> REDIS Disconnected...");
+
+    redis_subscription_->LogEvent("RS : DISCONNECTED",
+                                  "warning: subscriber connection lost, " SIZET_FMT " channel(s) and " SIZET_FMT " pattern(s) waiting, control in " UINT64_FMT " ms",
+                                  channel_to_clients_map_.size(), pattern_to_clients_map_.size(), reconnect_timeout_
+    );
     
     bridge_->CallOnMainThread([this]() {
         
@@ -718,6 +728,11 @@ bool ev::redis::subscriptions::Manager::OnREDISDisconnected (::ev::redis::subscr
                 }
             }
             
+            redis_subscription_->LogEvent("RS : GAVE UP",
+                                          "error: not recovered after " UINT64_FMT " ms, disconnecting " SIZET_FMT " client(s)",
+                                          reconnect_timeout_, clients_to_disconnect.size()
+            );
+
             for ( auto client : clients_to_disconnect ) {
                 client->OnREDISConnectionLost();
             }
@@ -752,10 +767,12 @@ bool ev::redis::subscriptions::Manager::OnREDISDisconnected (::ev::redis::subscr
 /**
  * @brief Called when, while in recovery mode, a reply proves that the connection to REDIS is back.
  *
+ * @param a_trigger Kind of reply that proved it, for logging purposes.
+ *
  * @remarks Re-subscribes the channels that were lost with the previous connection
  *          and leaves recovery mode.
  */
-void ev::redis::subscriptions::Manager::RecoverFromDisconnect ()
+void ev::redis::subscriptions::Manager::RecoverFromDisconnect (const char* const a_trigger)
 {
     CC_DEBUG_FAIL_IF_NOT_AT_MAIN_THREAD();
 
@@ -774,6 +791,12 @@ void ev::redis::subscriptions::Manager::RecoverFromDisconnect ()
 
     recovery_mode_     = false;
     reconnect_timeout_ = k_min_reconnect_timeout_;
+
+    const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - recovery_start_tp_).count();
+    redis_subscription_->LogEvent("RS : RECOVERED",
+                                  "by %s reply, %.1f second(s) after disconnect, " SIZET_FMT " channel(s) re-subscribed",
+                                  a_trigger, elapsed, channels_set.size()
+    );
 
     OSALITE_DEBUG_TRACE("ev_subscriptions", "<~ REDIS connection recovered: " SIZET_FMT " channel(s) re-subscribed...", channels_set.size());
 }

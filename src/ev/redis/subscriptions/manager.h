@@ -32,6 +32,7 @@
 #include <set>
 #include <vector>
 #include <map>
+#include <chrono>
 
 namespace ev
 {
@@ -132,7 +133,8 @@ namespace ev
                 static ::ev::Bridge*                          bridge_;
                 static uint64_t                               reconnect_timeout_;
                 static bool                                   recovery_mode_;
-                
+                static std::chrono::steady_clock::time_point  recovery_start_tp_;
+
             private: // Static Const Data
                 
                 static const uint64_t                         k_min_reconnect_timeout_;
@@ -208,7 +210,7 @@ namespace ev
                 
                 void OnREDISReplyReceived  (const ::ev::redis::subscriptions::Reply* a_reply);
                 bool OnREDISDisconnected   (::ev::redis::subscriptions::Request* a_request);
-                void RecoverFromDisconnect ();
+                void RecoverFromDisconnect (const char* const a_trigger);
                 
             }; // end of class 'Manager'
             

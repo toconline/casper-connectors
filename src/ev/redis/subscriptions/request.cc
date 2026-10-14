@@ -32,6 +32,12 @@
 
 #include <signal.h>
 
+#include <stdarg.h> // va_list
+#include <stdio.h>  // vsnprintf
+
+// ... control PING reply timeout ...
+static const long k_ping_timeout_ms_ = 10000;
+
 #ifdef __APPLE__
 #pragma mark -
 #endif
@@ -59,7 +65,7 @@ ev::redis::subscriptions::Request::Request (const ::ev::Loggable::Data& a_loggab
     ping_context_        = nullptr;
     subscribed_count_    = 0;
 
-    ev::LoggerV2::GetInstance().Register(this, { "redis_subscriptions_trace" });
+    ev::LoggerV2::GetInstance().Register(this, { "redis_subscriptions_trace", "cc-modules" });
 }
 
 /**
@@ -134,6 +140,7 @@ bool ev::redis::subscriptions::Request::Step (ev::Object* a_object, ev::Request*
                                         __FUNCTION__,
                                         subscribed_count_
         );
+        LogEvent("RS : PING SKIPPED", "connection in subscribe mode, " SIZET_FMT " subscription(s)", subscribed_count_);
     }
 
     // ... check if we've another request and if we're ready to 'step' it now ...
@@ -170,8 +177,9 @@ bool ev::redis::subscriptions::Request::Step (ev::Object* a_object, ev::Request*
                                      }
             );
         } else if ( pending_context_ptr_ == ping_context_ ) {
+            LogEvent("RS : PING SENT", "control ping, waiting up to %ld second(s) for reply", k_ping_timeout_ms_ / 1000);
             request_ptr_->SetTimeout(/* a_ms*/
-                                     10000,
+                                     k_ping_timeout_ms_,
                                      /* a_callback */
                                      [this, logged = false] () mutable {
                                          // ... called on every hub idle cycle after expiring, log it only once ...
@@ -184,6 +192,7 @@ bool ev::redis::subscriptions::Request::Step (ev::Object* a_object, ev::Request*
                                                                          "[%-30s] ::: ERROR ::: PING TIMEOUT - no reply received ::: ERROR :::",
                                                                          __FUNCTION__
                                          );
+                                         LogEvent("RS : PING TIMEOUT", "error: no reply to control ping after %ld second(s)", k_ping_timeout_ms_ / 1000);
                                      }
             );
         } else {
@@ -745,6 +754,25 @@ bool ev::redis::subscriptions::Request::Ping ()
 
     // ... we're none ...
     return true;
+}
+
+/**
+ * @brief Log a REDIS subscriptions life cycle event to 'cc-modules' log ( if that log is enabled ).
+ *
+ * @param a_key    Event key, e.g. 'RS : DISCONNECTED'.
+ * @param a_format printf like format.
+ */
+void ev::redis::subscriptions::Request::LogEvent (const char* const a_key, const char* const a_format, ...)
+{
+    char    message[512];
+    va_list args;
+    va_start(args, a_format);
+    const int rv = vsnprintf(message, sizeof(message), a_format, args);
+    va_end(args);
+    if ( rv < 0 ) {
+        return;
+    }
+    ev::LoggerV2::GetInstance().Log(this, "cc-modules", "%-28.28s, %s", a_key, message);
 }
 
 #ifdef __APPLE__
