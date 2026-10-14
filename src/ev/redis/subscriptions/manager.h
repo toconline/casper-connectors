@@ -206,8 +206,9 @@ namespace ev
                 
             private: // Method(s) / Function(s)
                 
-                void OnREDISReplyReceived (const ::ev::redis::subscriptions::Reply* a_reply);
-                bool OnREDISDisconnected  (::ev::redis::subscriptions::Request* a_request);
+                void OnREDISReplyReceived  (const ::ev::redis::subscriptions::Reply* a_reply);
+                bool OnREDISDisconnected   (::ev::redis::subscriptions::Request* a_request);
+                void RecoverFromDisconnect ();
                 
             }; // end of class 'Manager'
             

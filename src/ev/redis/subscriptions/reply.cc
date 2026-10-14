@@ -75,6 +75,26 @@ ev::redis::subscriptions::Reply::Reply (const ev::Loggable::Data& a_loggable_dat
             // The number of elements in the multi bulk reply is stored in reply->elements.
             // Every element in the multi bulk reply is a redisReply object as well and can be accessed via reply->element[..index..].
             // Redis may reply with nested arrays but this is fully supported.
+
+            // ... PING reply while in subscribe mode: [ "pong", <message or ""> ] instead of a +PONG status ...
+            if ( a_reply->elements >= 2
+                &&
+                nullptr != a_reply->element[0] && REDIS_REPLY_STRING == a_reply->element[0]->type
+                &&
+                4 == a_reply->element[0]->len && 0 == strncasecmp(a_reply->element[0]->str, "pong", 4)
+            ) {
+                // ... handle it as a +PONG status reply ...
+                kind_  = ev::redis::subscriptions::Reply::Kind::Status;
+                value_ = std::string("PONG");
+                // ... for debug purposes only ...
+                ev::LoggerV2::GetInstance().Log(this, "redis_trace",
+                                                "[%-30s] : a_reply = %p - 'pong' array, handled as 'status': %s",
+                                                __FUNCTION__,
+                                                a_reply, value_.String().c_str()
+                );
+                break;
+            }
+
             if ( a_reply->elements < 3 ) {
                 throw ev::Exception("Unexpected number of elements from a REDIS reply: got " SIZET_FMT ", expected at least" SIZET_FMT " !",
                                     a_reply->elements, static_cast<size_t>(3));

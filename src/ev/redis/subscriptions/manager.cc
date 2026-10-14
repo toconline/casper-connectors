@@ -620,6 +620,11 @@ void ev::redis::subscriptions::Manager::OnREDISReplyReceived (const ::ev::redis:
         case ::ev::redis::subscriptions::Reply::Kind::Subscribe:
         {
             OSALITE_DEBUG_TRACE("ev_subscriptions","subscribed to %s", channel_or_pattern);
+            // ... from a connection recovery process ?
+            if ( true == recovery_mode_ ) {
+                // ... a [P]SUBSCRIBE reply proves the connection is back ( control PING is skipped in subscribe mode ) ...
+                RecoverFromDisconnect();
+            }
             if ( a_reply->Pattern().length() > 0 ) {
                 Notify(a_reply->Pattern(), ev::redis::subscriptions::Manager::Status::Subscribed, pattern_to_clients_map_);
             } else {
@@ -655,16 +660,7 @@ void ev::redis::subscriptions::Manager::OnREDISReplyReceived (const ::ev::redis:
             if ( 0 == strcasecmp (a_reply->value().String().c_str(), "PONG") ) {
                 // ... from a connection recovery process ?
                 if ( true == recovery_mode_ ) {
-                    // ... first subscribe channels ...
-                    if ( channel_to_clients_map_.size() > 0 ) {
-                        std::set<std::string> channels_set;
-                        for ( auto it : channel_to_clients_map_ ) {
-                            channels_set.insert(it.first);
-                        }
-                        redis_subscription_->Subscribe(channels_set);
-                    }
-                    recovery_mode_     = false;
-                    reconnect_timeout_ = k_min_reconnect_timeout_;
+                    RecoverFromDisconnect();
                 }
             }
             break;
@@ -742,6 +738,35 @@ bool ev::redis::subscriptions::Manager::OnREDISDisconnected (::ev::redis::subscr
         }
         
     }, reconnect_timeout_);
-    
+
     return true;
+}
+
+/**
+ * @brief Called when, while in recovery mode, a reply proves that the connection to REDIS is back.
+ *
+ * @remarks Re-subscribes the channels that were lost with the previous connection
+ *          and leaves recovery mode.
+ */
+void ev::redis::subscriptions::Manager::RecoverFromDisconnect ()
+{
+    CC_DEBUG_FAIL_IF_NOT_AT_MAIN_THREAD();
+
+    OSALITE_DEBUG_TRACE("ev_subscriptions", "~> REDIS connection recovered...");
+
+    // ... subscribe channels that are not subscribed ( or pending ) in the new connection ...
+    std::set<std::string> channels_set;
+    for ( auto it : channel_to_clients_map_ ) {
+        if ( false == redis_subscription_->IsSubscribedOrPending(it.first) ) {
+            channels_set.insert(it.first);
+        }
+    }
+    if ( channels_set.size() > 0 ) {
+        redis_subscription_->Subscribe(channels_set);
+    }
+
+    recovery_mode_     = false;
+    reconnect_timeout_ = k_min_reconnect_timeout_;
+
+    OSALITE_DEBUG_TRACE("ev_subscriptions", "<~ REDIS connection recovered: " SIZET_FMT " channel(s) re-subscribed...", channels_set.size());
 }

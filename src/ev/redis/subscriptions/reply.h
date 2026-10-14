@@ -71,10 +71,11 @@ namespace ev
                 
             public: // Method(s) / Function(s)
                 
-                const Kind         kind    () const;
-                const std::string& Channel () const;
-                const std::string& Pattern () const;
-                
+                const Kind         kind                       () const;
+                const std::string& Channel                    () const;
+                const std::string& Pattern                    () const;
+                size_t             NumberOfSubscribedChannels () const;
+
             }; // end of class 'Reply'
             
             /**
@@ -99,6 +100,14 @@ namespace ev
             inline const std::string& Reply::Pattern () const
             {
                 return pattern_;
+            }
+
+            /**
+             * @brief Number of channels and patterns this connection is subscribed to, as reported by a [P][UN]SUBSCRIBE reply.
+             */
+            inline size_t Reply::NumberOfSubscribedChannels () const
+            {
+                return number_of_subscribed_channels_;
             }
 
         } // end of namespace 'subscriptions'
