@@ -32,6 +32,12 @@
 
 #include <signal.h>
 
+#include <stdarg.h> // va_list
+#include <stdio.h>  // vsnprintf
+
+// ... control PING reply timeout ...
+static const long k_ping_timeout_ms_ = 10000;
+
 #ifdef __APPLE__
 #pragma mark -
 #endif
@@ -57,8 +63,9 @@ ev::redis::subscriptions::Request::Request (const ::ev::Loggable::Data& a_loggab
     request_ptr_         = nullptr;
     pending_context_ptr_ = nullptr;
     ping_context_        = nullptr;
-    
-    ev::LoggerV2::GetInstance().Register(this, { "redis_subscriptions_trace" });
+    subscribed_count_    = 0;
+
+    ev::LoggerV2::GetInstance().Register(this, { "redis_subscriptions_trace", "cc-modules" });
 }
 
 /**
@@ -120,6 +127,22 @@ bool ev::redis::subscriptions::Request::Step (ev::Object* a_object, ev::Request*
         delete a_object;
     }
     
+    // ... a control PING can't be sent while this connection is in subscribe mode ...
+    // ... ( REDIS replies with [ "pong", "" ], which hiredis drops, so the PING would never be acknowledged ) ...
+    if ( nullptr == pending_context_ptr_ && pending_.size() > 0 && pending_.front() == ping_context_ && subscribed_count_ > 0 ) {
+        // ... skip it, a [P]SUBSCRIBE reply was already received in this connection ...
+        pending_.pop_front();
+        delete ping_context_;
+        ping_context_ = nullptr;
+        // ... for debug purposes only ...
+        ev::LoggerV2::GetInstance().Log(this, "redis_subscriptions_trace",
+                                        "[%-30s] ::: INFO ::: PING SKIPPED - connection in subscribe mode, " SIZET_FMT " subscription(s) ::: INFO :::",
+                                        __FUNCTION__,
+                                        subscribed_count_
+        );
+        LogEvent("RS : PING SKIPPED", "connection in subscribe mode, " SIZET_FMT " subscription(s)", subscribed_count_);
+    }
+
     // ... check if we've another request and if we're ready to 'step' it now ...
     if ( pending_.size() > 0 && nullptr == pending_context_ptr_ ) {
         pending_context_ptr_ = pending_.front();
@@ -151,6 +174,25 @@ bool ev::redis::subscriptions::Request::Step (ev::Object* a_object, ev::Request*
                                          if ( true == core_dump ) {
                                              raise(SIGABRT);
                                          }
+                                     }
+            );
+        } else if ( pending_context_ptr_ == ping_context_ ) {
+            LogEvent("RS : PING SENT", "control ping, waiting up to %ld second(s) for reply", k_ping_timeout_ms_ / 1000);
+            request_ptr_->SetTimeout(/* a_ms*/
+                                     k_ping_timeout_ms_,
+                                     /* a_callback */
+                                     [this, logged = false] () mutable {
+                                         // ... called on every hub idle cycle after expiring, log it only once ...
+                                         if ( true == logged ) {
+                                             return;
+                                         }
+                                         logged = true;
+                                         // ... for debug purposes only ...
+                                         ev::LoggerV2::GetInstance().Log(this, "redis_subscriptions_trace",
+                                                                         "[%-30s] ::: ERROR ::: PING TIMEOUT - no reply received ::: ERROR :::",
+                                                                         __FUNCTION__
+                                         );
+                                         LogEvent("RS : PING TIMEOUT", "error: no reply to control ping after %ld second(s)", k_ping_timeout_ms_ / 1000);
                                      }
             );
         } else {
@@ -287,6 +329,9 @@ void ev::redis::subscriptions::Request::Publish (std::vector<ev::Result *>& a_re
                                                                           ev::redis::subscriptions::Request::Status::Unsubscribed
                 );
 
+                // ... keep track of subscribe mode ( REDIS reports the number of subscriptions of this connection ) ...
+                subscribed_count_ = reply->NumberOfSubscribedChannels();
+
                 // ... for debug purposes only ...
                 ev::LoggerV2::GetInstance().Log(this, "redis_subscriptions_trace",
                                                 "[%-30s] \t\t %-15s = %-40s",
@@ -410,6 +455,8 @@ void ev::redis::subscriptions::Request::Publish (std::vector<ev::Result *>& a_re
                     );
                     // ...and reset pending context ...
                     pending_context_ptr_ = nullptr;
+                    // ... remove timeout ...
+                    request_ptr_->SetTimeout(/* a_ms */ 0, /* a_callback */ nullptr);
                 }
                 break;
             }
@@ -517,7 +564,9 @@ bool ev::redis::subscriptions::Request::Disconnected ()
     
     pending_.clear();
     pending_context_ptr_ = nullptr;
-    
+    // ... a new connection is not in subscribe mode ...
+    subscribed_count_    = 0;
+
     if ( nullptr != ping_context_ ) {
         delete ping_context_;
         ping_context_ = nullptr;
@@ -535,7 +584,10 @@ bool ev::redis::subscriptions::Request::Disconnected ()
         }
         map->clear();
     }
-    
+    // ... a new connection has no subscriptions, forget previous status ...
+    channels_status_map_.clear();
+    patterns_status_map_.clear();
+
     // ... notify owner?
     if ( nullptr != disconnected_callback_ ) {
         return ( true == disconnected_callback_(this) ) ? false : true;
@@ -702,6 +754,25 @@ bool ev::redis::subscriptions::Request::Ping ()
 
     // ... we're none ...
     return true;
+}
+
+/**
+ * @brief Log a REDIS subscriptions life cycle event to 'cc-modules' log ( if that log is enabled ).
+ *
+ * @param a_key    Event key, e.g. 'RS : DISCONNECTED'.
+ * @param a_format printf like format.
+ */
+void ev::redis::subscriptions::Request::LogEvent (const char* const a_key, const char* const a_format, ...)
+{
+    char    message[512];
+    va_list args;
+    va_start(args, a_format);
+    const int rv = vsnprintf(message, sizeof(message), a_format, args);
+    va_end(args);
+    if ( rv < 0 ) {
+        return;
+    }
+    ev::LoggerV2::GetInstance().Log(this, "cc-modules", "%-28.28s, %s", a_key, message);
 }
 
 #ifdef __APPLE__

@@ -130,6 +130,7 @@ namespace ev
                 std::deque<Context*>           pending_;                //!< Pending commands.
                 Context*                       pending_context_ptr_;    //!< Pointer to the current request context.
                 Context*                       ping_context_;           //!< Ping request context.
+                size_t                         subscribed_count_;       //!< Number of channels and patterns subscribed in the current connection, as reported by REDIS.
                 ev::redis::Request*            request_ptr_;            //!< Pointer to the request that wil be kept alive, for subscriptions message exchange.
                 POCStatusMap                   channels_status_map_;     //!<
                 POCStatusMap                   patterns_status_map_;     //!<
@@ -165,7 +166,9 @@ namespace ev
                 bool   IsPUnsubscribedOrPending (const std::string& a_pattern);
                 
                 bool   Ping                     ();
-                
+
+                void   LogEvent                 (const char* const a_key, const char* const a_format, ...) __attribute__((format(printf, 3, 4)));
+
             private:
                 
                 void   Subscribe                (ContextMap& a_map, POCStatusMap& a_status_map, const std::set<std::string>& a_names);
